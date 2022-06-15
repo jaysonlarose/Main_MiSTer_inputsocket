@@ -1124,6 +1124,74 @@ enum QUIRK
 	QUIRK_WHEEL,
 };
 
+typedef struct
+{
+	uint16_t vid, pid;
+	char     idstr[256];
+	char     mod;
+
+	uint8_t  led;
+	uint8_t  mouse;
+	uint8_t  axis_edge[256];
+	int8_t   axis_pos[256];
+
+	uint8_t  num;
+	uint8_t  has_map;
+	uint32_t map[NUMBUTTONS];
+	int      map_shown;
+
+	uint8_t  osd_combo;
+
+	uint8_t  has_mmap;
+	uint32_t mmap[NUMBUTTONS];
+	uint16_t jkmap[1024];
+	int      stick_l[2];
+	int      stick_r[2];
+
+	uint8_t  has_kbdmap;
+	uint8_t  kbdmap[256];
+
+	int32_t  guncal[4];
+
+	int      accx, accy;
+	int      startx, starty;
+	int      lastx, lasty;
+	int      quirk;
+
+	int      misc_flags;
+	int      paddle_val;
+	int      spinner_prev;
+	int      spinner_acc;
+	int      spinner_prediv;
+	int      spinner_dir;
+	int      spinner_accept;
+	int      old_btn;
+	int      ds_mouse_emu;
+
+	int      lightgun_req;
+	int      lightgun;
+
+	int      has_rumble;
+	int      rumble_en;
+	uint16_t last_rumble;
+	ff_effect rumble_effect;
+
+	int8_t   wh_steer;
+	int8_t   wh_accel;
+	int8_t   wh_brake;
+	int8_t   wh_clutch;
+	int8_t   wh_combo;
+
+	int      timeout;
+	char     mac[64];
+
+	int      bind;
+	char     devname[32];
+	char     id[80];
+	char     name[128];
+	char     sysfs[512];
+} devInput;
+
 static devInput input[NUMDEV] = {};
 static devInput player_pad[NUMPLAYERS] = {};
 static devInput player_pdsp[NUMPLAYERS] = {};
@@ -4064,7 +4132,7 @@ static void setup_wheels()
 					set_wheel_range(i, cfg.wheel_range);
 				}
 			}
-			
+
 			//Namco NeGcon via RetroZord adapter
 			else if (input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel"))
 			{
@@ -4336,6 +4404,18 @@ int input_test(int getchar)
 							input_lightgun_load(n);
 						}
 
+						//GUN4IR Lightgun
+						if (input[n].vid == 0x2341 && input[n].pid >= 0x8042 && input[n].pid <= 0x8049)
+						{
+							input[n].quirk = QUIRK_LIGHTGUN;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = 0;
+							input[n].guncal[3] = 32767;
+							input_lightgun_load(n);
+						}
+
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
@@ -4500,7 +4580,7 @@ int input_test(int getchar)
 						memset(&ev, 0, sizeof(ev));
 						if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
 						{
-							input_socket_send(i, &ev, &input[i]);
+							input_socket_send(i, input[i].vid, input[i].pid, &ev);
 							if (getchar)
 							{
 								if (ev.type == EV_KEY && ev.value >= 1)
@@ -4783,8 +4863,10 @@ int input_test(int getchar)
 
 									if (ev.type == EV_KEY && input[dev].num)
 									{
+										if (ev.code == (input[dev].mmap[SYS_BTN_L] & 0xFFFF)) input[dev].rumble_en = ev.value;
+
 										int n = get_rumble_device(input[dev].num);
-										if (n >= 0)
+										if (n >= 0 && (input[dev].rumble_en || !ev.value))
 										{
 											uint16_t rumble_val = input[n].last_rumble;
 											if (ev.code == (input[dev].mmap[SYS_BTN_X] & 0xFFFF)) set_rumble(n, (rumble_val & 0xFF00) | ((ev.value) ? 0xFF : 0x00));
