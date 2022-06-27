@@ -14,6 +14,7 @@
 #include "cfg.h"
 
 struct __attribute__((__packed__)) input_socket_packet {
+	uint8_t opcode;
 	uint8_t index;
 	uint16_t vendor_id;
 	uint16_t product_id;
@@ -22,6 +23,9 @@ struct __attribute__((__packed__)) input_socket_packet {
 	int32_t value;
 };
 
+#define OP_INPUT 0
+#define OP_PING  1
+#define OP_PONG  2
 bool initialized = false;
 
 struct pollfd sockets[MAX_CONNECTIONS + 1];
@@ -76,6 +80,7 @@ void input_socket_init(void) {
 void input_socket_send(uint8_t inputno, uint16_t vid, uint16_t pid, struct input_event *ev) {
 	if (cfg.input_socket_enabled) {
 		struct input_socket_packet packet;
+		packet.opcode     = OP_INPUT;
 		packet.index      = inputno;
 		packet.vendor_id  = vid;
 		packet.product_id = pid;
@@ -100,7 +105,6 @@ int input_socket_poll(int timeout) {
 		} else if (return_value == 0) {
 			return 0;
 		}
-		printf("got stuff to do!\n");
 		for (int i = 0; i < MAX_CONNECTIONS + 1; i++) {
 			if (sockets[i].fd >= 0) {
 				// close and un-slot the socket if it's in an error state
@@ -132,13 +136,24 @@ int input_socket_poll(int timeout) {
 						}
 					// any other socket? I'm sure it has something interesting to say, but we just don't care
 					} else {
-						char trash[1024];
-						int rlen = read(sockets[i].fd, trash, 1024);
+						char trash[1];
+						int rlen = read(sockets[i].fd, trash, 1);
 						if (rlen == 0) {
 							printf("closing socket %d\n", i);
 							shutdown(sockets[i].fd, SHUT_RDWR);
 							close(sockets[i].fd);
 							sockets[i].fd = -1;
+						} else {
+							uint8_t opcode = trash[0];
+							if (opcode == OP_PING) {
+								trash[0] = OP_PONG;
+								write(sockets[i].fd, (char *) trash, 1);
+							} else {
+								printf("Unknown opcode %d, dropping client\n", opcode);
+								shutdown(sockets[i].fd, SHUT_RDWR);
+								close(sockets[i].fd);
+								sockets[i].fd = -1;
+							}
 						}
 					}
 				}
