@@ -76,6 +76,10 @@ typedef struct {
 	uint8_t input_socket_enabled;
 	uint16_t input_socket_bindport;
 	char input_socket_bindhost[128];
+	uint8_t vrr_mode;
+	uint8_t vrr_min_framerate;
+	uint8_t vrr_max_framerate;
+	uint8_t vrr_vesa_framerate;
 } cfg_t;
 
 extern cfg_t cfg;

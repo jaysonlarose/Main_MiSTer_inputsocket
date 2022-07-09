@@ -99,6 +99,10 @@ static const ini_var_t ini_vars[] =
 	{ "INPUT_SOCKET_ENABLED", (void *)(&(cfg.input_socket_enabled)), UINT8, 0, 1 },
 	{ "INPUT_SOCKET_BINDPORT", (void *)(&(cfg.input_socket_bindport)), UINT16, 1025, 65535 },
 	{ "INPUT_SOCKET_BINDHOST", (void *)(&(cfg.input_socket_bindhost)), STRING, 0, sizeof(cfg.input_socket_bindhost) - 1 },
+	{ "VRR_MODE", (void *)(&(cfg.vrr_mode)), UINT8, 0, 3},
+	{ "VRR_MIN_FRAMERATE", (void *)(&(cfg.vrr_min_framerate)), UINT8, 0, 255},
+	{ "VRR_MAX_FRAMERATE", (void *)(&(cfg.vrr_max_framerate)), UINT8, 0, 255},
+	{ "VRR_VESA_FRAMERATE", (void *)(&(cfg.vrr_vesa_framerate)), UINT8, 0, 255},
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
