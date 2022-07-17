@@ -16,6 +16,7 @@
 struct __attribute__((__packed__)) input_socket_packet {
 	uint8_t opcode;
 	uint8_t index;
+	uint8_t player_id;
 	uint16_t vendor_id;
 	uint16_t product_id;
 	uint16_t type;
@@ -77,11 +78,12 @@ void input_socket_init(void) {
 	}
 }
 
-void input_socket_send(uint8_t inputno, uint16_t vid, uint16_t pid, struct input_event *ev) {
+void input_socket_send(uint8_t inputno, uint8_t player_id, uint16_t vid, uint16_t pid, struct input_event *ev) {
 	if (cfg.input_socket_enabled) {
 		struct input_socket_packet packet;
 		packet.opcode     = OP_INPUT;
 		packet.index      = inputno;
+		packet.player_id  = player_id;
 		packet.vendor_id  = vid;
 		packet.product_id = pid;
 		packet.type       = ev->type;

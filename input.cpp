@@ -4580,7 +4580,7 @@ int input_test(int getchar)
 						memset(&ev, 0, sizeof(ev));
 						if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
 						{
-							input_socket_send(i, input[i].vid, input[i].pid, &ev);
+							input_socket_send(i, input[i].num, input[i].vid, input[i].pid, &ev);
 							if (getchar)
 							{
 								if (ev.type == EV_KEY && ev.value >= 1)

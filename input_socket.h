@@ -7,7 +7,7 @@
 
 
 void input_socket_init(void);
-void input_socket_send(uint8_t, uint16_t, uint16_t, struct input_event *);
+void input_socket_send(uint8_t, uint8_t, uint16_t, uint16_t, struct input_event *);
 int input_socket_poll(int);
 void input_socket_destroy(void);
 
