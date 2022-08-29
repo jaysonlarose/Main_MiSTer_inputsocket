@@ -28,6 +28,8 @@
 #include "joymapping.h"
 #include "support.h"
 #include "input_socket.h"
+#include "profiling.h"
+#include "gamecontroller_db.h"
 
 #define NUMDEV 30
 #define NUMPLAYERS 6
@@ -36,6 +38,7 @@
 
 char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
+static struct pollfd pool[NUMDEV + 3];
 
 static int ev2amiga[] =
 {
@@ -385,16 +388,16 @@ static const int ev2ps2[] =
 	0x70, //82  KEY_KP0
 	0x71, //83  KEY_KPDOT
 	NONE, //84  ???
-	NONE, //85  KEY_ZENKAKU
+	0x0e, //85  KEY_ZENKAKU
 	0x61, //86  KEY_102ND
 	0x78, //87  KEY_F11
 	0x07, //88  KEY_F12
-	NONE, //89  KEY_RO
-	NONE, //90  KEY_KATAKANA
-	NONE, //91  KEY_HIRAGANA
-	NONE, //92  KEY_HENKAN
-	NONE, //93  KEY_KATAKANA
-	NONE, //94  KEY_MUHENKAN
+	0x13, //89  KEY_RO
+	0x13, //90  KEY_KATAKANA
+	0x13, //91  KEY_HIRAGANA
+	0x64, //92  KEY_HENKAN
+	0x13, //93  KEY_KATAKANA
+	0x67, //94  KEY_MUHENKAN
 	NONE, //95  KEY_KPJPCOMMA
 	EXT | 0x5a, //96  KEY_KPENTER
 	RCTRL | EXT | 0x14, //97  KEY_RIGHTCTRL
@@ -424,10 +427,10 @@ static const int ev2ps2[] =
 	NONE, //121 KEY_KPCOMMA
 	NONE, //122 KEY_HANGEUL
 	NONE, //123 KEY_HANJA
-	NONE, //124 KEY_YEN
+	0x6a, //124 KEY_YEN
 	LGUI | EXT | 0x1f, //125 KEY_LEFTMETA
 	RGUI | EXT | 0x27, //126 KEY_RIGHTMETA
-	NONE, //127 KEY_COMPOSE
+	EXT | 0x2f, //127 KEY_COMPOSE
 	NONE, //128 KEY_STOP
 	NONE, //129 KEY_AGAIN
 	NONE, //130 KEY_PROPS
@@ -1126,7 +1129,7 @@ enum QUIRK
 
 typedef struct
 {
-	uint16_t vid, pid;
+	uint16_t bustype, vid, pid, version;
 	char     idstr[256];
 	char     mod;
 
@@ -2286,9 +2289,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
-				memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
-				memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
-				//input[dev].has_mmap++;
+				if (!gcdb_map_for_controller(input[dev].bustype, input[dev].vid, input[dev].pid, input[dev].version, pool[dev].fd, input[dev].mmap))
+				{
+					memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+					memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
+					//input[dev].has_mmap++;
+				}
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 
@@ -3228,8 +3234,6 @@ void send_map_cmd(int key)
 #define CMD_FIFO "/dev/MiSTer_cmd"
 #define LED_MONITOR "/sys/class/leds/hps_led0/brightness_hw_changed"
 
-static struct pollfd pool[NUMDEV + 3];
-
 // add sequential suffixes for non-merged devices
 void make_unique(uint16_t vid, uint16_t pid, int type)
 {
@@ -3382,6 +3386,8 @@ void mergedevs()
 				input[i].bind = j;
 				input[i].vid = input[j].vid;
 				input[i].pid = input[j].pid;
+				input[i].version = input[j].version;
+				input[i].bustype = input[j].bustype;
 				input[i].quirk = input[j].quirk;
 				memcpy(input[i].name, input[j].name, sizeof(input[i].name));
 				memcpy(input[i].idstr, input[j].idstr, sizeof(input[i].idstr));
@@ -4221,6 +4227,8 @@ int input_test(int getchar)
 							ioctl(pool[n].fd, EVIOCGID, &id);
 							input[n].vid = id.vendor;
 							input[n].pid = id.product;
+							input[n].version = id.version;
+							input[n].bustype = id.bustype;
 
 							ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(uniq)), uniq);
 							ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
@@ -5180,6 +5188,8 @@ int input_test(int getchar)
 
 int input_poll(int getchar)
 {
+	PROFILE_FUNCTION();
+
 	static int af[NUMPLAYERS] = {};
 	static uint32_t time[NUMPLAYERS] = {};
 	static uint32_t joy_prev[NUMPLAYERS] = {};

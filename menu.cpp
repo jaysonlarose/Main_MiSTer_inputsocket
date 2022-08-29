@@ -63,6 +63,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "support.h"
 #include "bootcore.h"
 #include "ide.h"
+#include "profiling.h"
 
 /*menu states*/
 enum MENU
@@ -899,6 +900,8 @@ static int page = 0;
 
 void HandleUI(void)
 {
+	PROFILE_FUNCTION();
+
 	if (bt_timer >= 0)
 	{
 		if (!bt_timer) bt_timer = (int32_t)GetTimer(6000);
@@ -1040,6 +1043,7 @@ void HandleUI(void)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
+		static unsigned long off_timeout = 0;
 		if (!video_fb_state() && cfg.fb_terminal)
 		{
 			if (timeout && CheckTimer(timeout))
@@ -1055,7 +1059,14 @@ void HandleUI(void)
 				{
 					menu_visible--;
 					video_menu_bg(user_io_status_get("[3:1]"), 2);
+					off_timeout = cfg.video_off ? GetTimer(cfg.video_off * 1000) : 0;
 				}
+			}
+
+			if (off_timeout && CheckTimer(off_timeout) && menu_visible < 0)
+			{
+				off_timeout = 0;
+				video_menu_bg(user_io_status_get("[3:1]"), 3);
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
@@ -1320,7 +1331,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86() && has_menu()) //Win+Menu
+					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86() && !is_pcxt() && has_menu()) //Win+Menu
 					{
 						menustate = MENU_COMMON1;
 					}
@@ -1675,6 +1686,13 @@ void HandleUI(void)
 								substrcpy(s + 1, p, 2);
 								strcat(s, " ");
 								strcat(s, x86_get_image_name(num));
+							}
+							else if (is_pcxt() && pcxt_get_image_name(num))
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 2);
+								strcat(s, " ");
+								strcat(s, pcxt_get_image_name(num));
 							}
 							else
 							{
@@ -2119,7 +2137,12 @@ void HandleUI(void)
 								if (!strlen(s) || get_arc(s) < 0) x = 0;
 							}
 
-							user_io_status_set(p + 1, x, ex);
+							user_io_status_set(p + 1, x, ex);														
+														
+							if (is_pcxt() && (p[1] == 'J' || p[1] == 'L'))
+							{
+								pcxt_load_images();
+							}
 
 							if (is_x86() && p[1] == 'A')
 							{
@@ -2159,6 +2182,7 @@ void HandleUI(void)
 
 									if (is_pce() && !bit) pcecd_reset();
 									if (is_saturn() && !bit) saturn_reset();
+									if (is_pcxt() && !bit) pcxt_init();
 
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
@@ -2263,7 +2287,11 @@ void HandleUI(void)
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-			if (is_x86())
+			if (is_pcxt())
+			{
+				pcxt_set_image(ioctl_index, selPath);
+			}
+			else if (is_x86())
 			{
 				x86_set_image(ioctl_index, selPath);
 			}
@@ -2516,6 +2544,7 @@ void HandleUI(void)
 					user_io_status_save(filename);
 					if (is_x86()) x86_config_save();
 					if (is_arcade()) arcade_nvm_save();
+					if (is_pcxt()) pcxt_config_save();
 				}
 				break;
 
@@ -4651,7 +4680,7 @@ void HandleUI(void)
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
-		if (cfg.log_file_entry)
+		if (cfg.log_file_entry && flist_nDirEntries())
 		{
 			//Write out paths infos for external integration
 			FILE* filePtr = fopen("/tmp/CURRENTPATH", "w");
@@ -4684,6 +4713,7 @@ void HandleUI(void)
 				OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
 				OsdUpdate();
 				sleep(1);
+				if (is_pcxt()) pcxt_load_images();
 			}
 			input_poll(0);
 			menu_key_set(0);
@@ -5655,7 +5685,7 @@ void HandleUI(void)
 			else if (menusub == 7 && select)
 			{
 				ioctl_index = 1;
-				SelectFile(Selected_F[4], "ROM", 0, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
+				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
 			else if (menusub == 8)
 			{

@@ -7,6 +7,7 @@
 #include "fpga_io.h"
 #include "osd.h"
 #include "input_socket.h"
+#include "profiling.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
@@ -27,9 +28,12 @@ static void scheduler_co_poll(void)
 	{
 		scheduler_wait_fpga_ready();
 
-		user_io_poll();
-		input_poll(0);
-		input_socket_poll(0);
+		{
+			SPIKE_SCOPE("co_poll", 1000);
+			user_io_poll();
+			input_poll(0);
+			input_socket_poll(0);
+		}
 
 		scheduler_yield();
 	}
@@ -39,8 +43,11 @@ static void scheduler_co_ui(void)
 {
 	for (;;)
 	{
-		HandleUI();
-		OsdUpdate();
+		{
+			SPIKE_SCOPE("co_ui", 1000);
+			HandleUI();
+			OsdUpdate();
+		}
 
 		scheduler_yield();
 	}
