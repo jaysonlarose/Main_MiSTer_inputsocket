@@ -2289,12 +2289,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
-				if (!gcdb_map_for_controller(input[dev].bustype, input[dev].vid, input[dev].pid, input[dev].version, pool[dev].fd, input[dev].mmap))
+				if (!gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].version, pool[sub_dev].fd, input[dev].mmap))
 				{
 					memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 					memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
 					//input[dev].has_mmap++;
 				}
+			} else {
+				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap); 
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 
