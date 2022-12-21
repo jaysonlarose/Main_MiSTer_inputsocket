@@ -10,6 +10,7 @@
 #include <linux/input.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/time.h>
 #include "input.h"
 #include "cfg.h"
 
@@ -22,6 +23,8 @@ struct __attribute__((__packed__)) input_socket_packet {
 	uint16_t type;
 	uint16_t code;
 	int32_t value;
+	time_t tv_sec;
+	suseconds_t tv_usec;
 };
 
 #define OP_INPUT 0
@@ -89,6 +92,8 @@ void input_socket_send(uint8_t inputno, uint8_t player_id, uint16_t vid, uint16_
 		packet.type       = ev->type;
 		packet.code       = ev->code;
 		packet.value      = ev->value;
+		packet.tv_sec     = ev->time.tv_sec;
+		packet.tv_usec    = ev->time.tv_usec;
 
 		for (int i = 1; i < MAX_CONNECTIONS + 1; i++) {
 			if (sockets[i].fd >= 0) {
