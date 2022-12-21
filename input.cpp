@@ -1754,7 +1754,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			}
 			else
 			{
-				if (!user_io_osd_is_visible() && press)
+				if (!user_io_osd_is_visible() && press && !cfg.disable_autofire)
 				{
 					if (lastcode[num] && lastmask[num])
 					{
@@ -1849,6 +1849,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 		if (user_io_osd_is_visible() || (bnum == BTN_OSD))
 		{
+			mask &= ~JOY_BTN3;
 			if (press)
 			{
 				osdbtn |= mask;
@@ -1953,6 +1954,10 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				ev.code = KEY_EQUAL;
 				break;
 
+			case JOY_R2:
+				ev.code = KEY_GRAVE;
+				break;
+
 			default:
 				ev.code = (bnum == BTN_OSD) ? KEY_MENU : 0;
 			}
@@ -1993,6 +1998,14 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 			case JOY_BTN4:
 				uinp_send_key(KEY_TAB, press);
+				break;
+
+			case JOY_L:
+				uinp_send_key(KEY_PAGEUP, press);
+				break;
+
+			case JOY_R:
+				uinp_send_key(KEY_PAGEDOWN, press);
 				break;
 			}
 		}
@@ -2836,16 +2849,24 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							joy_digital(0, JOY_BTN1, 0, ev->value, 0);
 							return;
 						}
-						else if ((input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16) ?
+
+						if ((input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16) ?
 							(ev->code == (input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16)) :
 							(ev->code == input[dev].mmap[SYS_BTN_B]))
 						{
 							joy_digital(0, JOY_BTN2, 0, ev->value, 0);
 							return;
 						}
-						else if (ev->code == input[dev].mmap[SYS_BTN_X])
+
+						if (ev->code == input[dev].mmap[SYS_BTN_X])
 						{
 							joy_digital(0, JOY_BTN4, 0, ev->value, 0);
+							return;
+						}
+
+						if (ev->code == input[dev].mmap[SYS_BTN_Y])
+						{
+							joy_digital(0, JOY_BTN3, 0, ev->value, 0);
 							return;
 						}
 
@@ -2861,11 +2882,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							return;
 						}
 
+						if (ev->code == input[dev].mmap[SYS_BTN_START])
+						{
+							joy_digital(0, JOY_L2, 0, ev->value, 0);
+							return;
+						}
+
 						if (ev->code == input[dev].mmap[SYS_BTN_SELECT])
 						{
-							struct input_event key_ev = *ev;
-							key_ev.code = KEY_GRAVE;
-							input_cb(&key_ev, 0, 0);
+							joy_digital(0, JOY_R2, 0, ev->value, 0);
 							return;
 						}
 
