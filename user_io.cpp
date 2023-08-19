@@ -34,6 +34,7 @@
 #include "audio.h"
 #include "shmem.h"
 #include "ide.h"
+#include "ide_cdrom.h"
 #include "profiling.h"
 
 #include "support.h"
@@ -324,6 +325,12 @@ char is_saturn()
 	return (is_saturn_type == 1);
 }
 
+static int is_n64_type = 0;
+char is_n64()
+{
+	if (!is_n64_type) is_n64_type = strcasecmp(orig_name, "N64") ? 2 : 1;
+	return (is_n64_type == 1);
+}
 
 static int is_no_type = 0;
 static int disable_osd = 0;
@@ -1055,6 +1062,7 @@ void SetUARTMode(int mode)
 	DisableIO();
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name());
+    MakeFile("/tmp/RBFNAME", user_io_get_core_name(1));
 
 	char data[20];
 	sprintf(data, "%d", baud);
@@ -1324,6 +1332,12 @@ void user_io_init(const char *path, const char *xml)
 
 	user_io_read_confstr();
 	user_io_read_core_name();
+
+	if ((fpga_get_buttons() & BUTTON_OSD) && is_menu())
+	{
+		altcfg(0);
+		SelectINI();
+	}
 
 	cfg_parse();
 	cfg_print();
@@ -2879,15 +2893,9 @@ void user_io_poll()
 		sysled_enable(1);
 
 		uint16_t sd_req = ide_check();
-		if (sd_req & 0x8000)
-		{
-			ide_io(0, sd_req & 7);
-			ide_io(1, (sd_req >> 3) & 7);
-		}
-		else
-		{
-			HandleHDD(c1, c2);
-		}
+		ide_io(0, sd_req & 7);
+		ide_io(1, (sd_req >> 3) & 7);
+		if (sd_req & 0x0100) ide_cdda_send_sector();
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();
