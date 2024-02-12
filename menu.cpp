@@ -109,8 +109,10 @@ enum MENU
 	MENU_JOYRESET1,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
+	MENU_JOYKBDMAP2,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
+	MENU_KBDMAP2,
 	MENU_BTPAIR,
 	MENU_BTPAIR2,
 	MENU_LGCAL,
@@ -984,6 +986,7 @@ void HandleUI(void)
 	static int vfilter_type;
 	static int old_volume = 0;
 	static uint32_t lock_pass_timeout = 0;
+	static uint32_t menu_timeout = 0;
 
 	static char	cp_MenuCancel;
 
@@ -2223,7 +2226,7 @@ void HandleUI(void)
 						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
-						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
+						if (is_saturn() || is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
@@ -2330,6 +2333,12 @@ void HandleUI(void)
 								}
 								else
 								{
+									if (!bit && is_uneon())
+									{
+										x86_ide_set();
+										menustate = MENU_NONE1;
+									}
+
 									if (is_megacd())
 									{
 										if (!bit) mcd_set_image(0, "");
@@ -2381,7 +2390,11 @@ void HandleUI(void)
 
 	case MENU_GENERIC_FILE_SELECTED:
 		{
-			if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+			if (!mgl->done)
+			{
+				if(mgl->item[mgl->current].path[0] == '/') snprintf(selPath, sizeof(selPath), "%s", mgl->item[mgl->current].path);
+				else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+			}
 
 			MenuHide();
 			printf("File selected: %s\n", selPath);
@@ -2409,7 +2422,7 @@ void HandleUI(void)
 				}
 				else if (is_n64())
 				{
-					if (!n64_rom_tx(selPath, idx)) Info("failed to load ROM");
+					if (!n64_rom_tx(selPath, idx, load_addr)) Info("failed to load ROM");
 				}
 				else
 				{
@@ -2432,7 +2445,11 @@ void HandleUI(void)
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
-			if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(((is_pce() && !strncasecmp(fs_pFileExt, "CUE", 3)) ? PCECD_DIR : NULL)), mgl->item[mgl->current].path);
+			if (!mgl->done)
+			{
+				if (mgl->item[mgl->current].path[0] == '/') snprintf(selPath, sizeof(selPath), "%s", mgl->item[mgl->current].path);
+				else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(((is_pce() && !strncasecmp(fs_pFileExt, "CUE", 3)) ? PCECD_DIR : NULL)), mgl->item[mgl->current].path);
+			}
 
 			if (store_name)
 			{
@@ -2451,7 +2468,7 @@ void HandleUI(void)
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-			else if (is_x86() || is_pcxt())
+			else if (is_x86() || is_pcxt() || (is_uneon() && idx >= 2))
 			{
 				x86_set_image(ioctl_index, selPath);
 			}
@@ -2524,7 +2541,7 @@ void HandleUI(void)
 				s[27] = '\x16';
 				s[28] = 0;
 				MenuWrite(n++, s, menusub == 2, 0);
-				MenuWrite(n++, " Button/Key remap for game \x16", menusub == 3, 0);
+				MenuWrite(n++, " Button/Key remap          \x16", menusub == 3, 0);
 				MenuWrite(n++, " Reset player assignment", menusub == 4, 0);
 
 				if (user_io_get_uart_mode())
@@ -3787,7 +3804,7 @@ void HandleUI(void)
 			if (get_map_clear())
 			{
 				OsdWrite(3);
-				OsdWrite(4, "           Clearing");
+				OsdWrite(4, "          Clearing");
 				OsdWrite(5);
 				joymap_first = 1;
 				break;
@@ -3796,7 +3813,7 @@ void HandleUI(void)
 			if (get_map_cancel())
 			{
 				OsdWrite(3);
-				OsdWrite(4, "           Canceling");
+				OsdWrite(4, "          Canceling");
 				OsdWrite(5);
 				break;
 			}
@@ -4022,8 +4039,8 @@ void HandleUI(void)
 		infowrite( 9, "Button -> Button same pad");
 		infowrite(10, "Key -> Key");
 		infowrite(11, "");
-		infowrite(12, "It will be cleared when you");
-		infowrite(13, "load the new core");
+		infowrite(12, "     Menu \x16 Finish ");
+		infowrite(13, "Menu-hold \x16 Clear  ");
 		OsdWrite(14, info_bottom, 0, 0);
 		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
 		break;
@@ -4057,9 +4074,22 @@ void HandleUI(void)
 			OsdWrite(OsdGetSize() - 1);
 		}
 
-		if (select || menu)
+		if (select || menu || get_map_finish() || get_map_cancel())
 		{
-			finish_map_setting(menu);
+			int clear = get_map_vid() && (menu || get_map_cancel());
+			finish_map_setting(clear);
+			menu_timeout = GetTimer(1000);
+			OsdWrite(1);
+			OsdWrite(2, clear ? "          Clearing" : "          Finishing");
+			OsdWrite(3);
+			OsdWrite(OsdGetSize() - 1);
+			menustate = MENU_JOYKBDMAP2;
+		}
+		break;
+
+	case MENU_JOYKBDMAP2:
+		if (CheckTimer(menu_timeout))
+		{
 			menustate = MENU_COMMON1;
 			menusub = 3;
 		}
@@ -6764,16 +6794,21 @@ void HandleUI(void)
 		menustate = MENU_KBDMAP1;
 		parentstate = MENU_KBDMAP;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "           cancel", menusub == 0, 0);
-		flag = 0;
+		m = 8;
+		OsdWrite(m++, info_top, 0, 0);
+		infowrite(m++, "");
+		infowrite(m++, "Enter \x16 Finish");
+		infowrite(m++, " ESC \x16 Clear");
+		infowrite(m++, "");
+		OsdWrite(m++, info_bottom, 0, 0);
 		break;
 
 	case MENU_KBDMAP1:
 		if(!get_map_button())
 		{
-			OsdWrite(3, "     Press key to remap", 0, 0);
+			OsdWrite(3, "     Press key to change", 0, 0);
 			s[0] = 0;
-			if(flag)
+			if(get_map_vid())
 			{
 				sprintf(s, "    on keyboard %04x:%04x", get_map_vid(), get_map_pid());
 			}
@@ -6782,7 +6817,6 @@ void HandleUI(void)
 		}
 		else
 		{
-			flag = 1;
 			sprintf(s, "  Press key to map 0x%02X to", get_map_button() & 0xFF);
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(5, "      on any keyboard", 0, 0);
@@ -6791,7 +6825,20 @@ void HandleUI(void)
 
 		if (select || menu)
 		{
+			if (!get_map_vid()) menu = 0;
+
+			OsdWrite(3);
+			OsdWrite(4, menu ? "          Clearing" : "          Finishing");
+			OsdWrite(5);
 			finish_map_setting(menu);
+			menu_timeout = GetTimer(1000);
+			menustate = MENU_KBDMAP2;
+		}
+		break;
+
+	case MENU_KBDMAP2:
+		if (CheckTimer(menu_timeout))
+		{
 			menustate = MENU_SYSTEM1;
 			menusub = 1;
 		}
@@ -7178,6 +7225,11 @@ void MenuHide()
 {
 	menustate = MENU_NONE1;
 	HandleUI();
+}
+
+int menu_present()
+{
+	return (menustate != MENU_NONE1) && (menustate != MENU_NONE2);
 }
 
 void Info(const char *message, int timeout, int width, int height, int frame)
