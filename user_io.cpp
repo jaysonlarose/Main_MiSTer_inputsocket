@@ -140,19 +140,19 @@ char* user_io_create_config_name(int with_ver)
 static char core_name[32] = {};
 static char ovr_name[32] = {};
 static char orig_name[32] = {};
-
-static char filepath_store[1024];
+static int  ovr_samedir = 0;
 
 char *user_io_make_filepath(const char *path, const char *filename)
 {
+	static char filepath_store[1024];
 	snprintf(filepath_store, 1024, "%s/%s", path, filename);
-
 	return filepath_store;
 }
 
-void user_io_name_override(const char* name)
+void user_io_name_override(const char* name, int samedir)
 {
 	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
+	ovr_samedir = samedir;
 }
 
 void user_io_set_core_name(const char *name)
@@ -166,12 +166,18 @@ char *user_io_get_core_name(int orig)
 	return orig ? orig_name : core_name;
 }
 
+char *user_io_get_core_name2()
+{
+	return (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
+}
+
 char *user_io_get_core_path(const char *suffix, int recheck)
 {
 	static char old_name[256] = {};
 	static char tmp[1024] = {};
+	char *name = (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
 
-	if (!suffix) suffix = (!strcasecmp(core_name, "minimig")) ? "Amiga" : core_name;
+	if (!suffix) suffix = (!strcasecmp(name, "minimig")) ? "Amiga" : name;
 	if (recheck || strcmp(old_name, suffix) || !tmp[0])
 	{
 		strcpy(old_name, suffix);
@@ -1318,6 +1324,7 @@ void user_io_init(const char *path, const char *xml)
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
+	printf("I/O Board type: %s\n", fpga_get_io_type() ? "digital" : "analogue");
 
 	if (core_type == CORE_TYPE_8BIT2)
 	{
@@ -1373,6 +1380,13 @@ void user_io_init(const char *path, const char *xml)
 		int ret = system(str);
 		if (!(ret & 0xFF) && ret) break;
 		sleep(1);
+	}
+
+	const char *main = getFullPath(cfg.main);
+	if (strcasecmp(main, getappname()) && FileExists(main))
+	{
+		printf("Current exec is %s, core requires exec %s\n", getappname(), main);
+		app_restart(path, xml, main);
 	}
 
 	uint8_t hotswap[4] = {};
@@ -1683,21 +1697,23 @@ void user_io_r_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	}
 }
 
-void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
+void user_io_digital_joystick(unsigned char joystick, uint64_t map, int newdir)
 {
 	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick ^ 1;
-
 	static int use32 = 0;
-	use32 |= map >> 16;
-
+	// primary button mappings are in 31:0, alternate mappings are in 64:32.
+	// take the logical OR to ensure a held button isn't overriden
+	// by other mapping being pressed
+	uint32_t bitmask = (uint32_t)(map) | (uint32_t)(map >> 32);
+	use32 |= bitmask >> 16;
 	spi_uio_cmd_cont((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2));
-	spi_w(map);
-	if(use32) spi_w(map >> 16);
+	spi_w(bitmask);
+	if(use32) spi_w(bitmask >> 16);
 	DisableIO();
 
 	if (!is_minimig() && joy_transl == 1 && newdir)
 	{
-		user_io_l_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
+		user_io_l_analog_joystick(joystick, (bitmask & 2) ? 128 : (bitmask & 1) ? 127 : 0, (bitmask & 8) ? 128 : (bitmask & 4) ? 127 : 0);
 	}
 }
 
@@ -3118,6 +3134,13 @@ void user_io_poll()
 			else if (op & 1)
 			{
 				uint32_t buf_n = sizeof(buffer[0]) / blksz;
+				unsigned int psx_blksz = 0;
+				if (is_psx() && blksz == 2352)
+				{
+					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
+					psx_blksz = psx_chd_hunksize();
+					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
+				}
 				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
 
 				int done = 0;
@@ -3511,6 +3534,7 @@ void user_io_poll()
 	if (is_saturn()) saturn_poll();
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
+	if (is_n64()) n64_poll();
 	process_ss(0);
 }
 

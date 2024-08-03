@@ -138,6 +138,7 @@ static const ini_var_t ini_vars[] =
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
 	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
+	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -417,7 +418,16 @@ static void ini_parse(int alt, const char *vmode)
 	int eof;
 
 	if (!orig_stdout) orig_stdout = stdout;
-	if(!dev_null) dev_null = fopen("/dev/null", "w");
+	if (!dev_null)
+	{
+		dev_null = fopen("/dev/null", "w");
+		if (dev_null)
+		{
+			int null_fd = fileno(dev_null);
+			if (null_fd >= 0) fcntl(null_fd, F_SETFD, FD_CLOEXEC);
+			stdout = dev_null;
+		}
+	}
 
 	ini_parser_debugf("Start INI parser for core \"%s\"(%s), video mode \"%s\".", user_io_get_core_name(0), user_io_get_core_name(1), vmode);
 
@@ -554,6 +564,7 @@ void cfg_parse()
 	cfg.video_saturation = 100;
 	cfg.video_hue = 0;
 	strcpy(cfg.video_gain_offset, "1, 0, 1, 0, 1, 0");
+	strcpy(cfg.main, "MiSTer");
 	has_video_sections = false;
 	using_video_section = false;
 	cfg_error_count = 0;

@@ -851,7 +851,7 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 	}
 	else
 	{
-		create_path(SCREENSHOT_DIR, CoreName);
+		create_path(SCREENSHOT_DIR, CoreName2);
 
 		time_t t = time(NULL);
 		struct tm tm = *localtime(&t);
@@ -859,13 +859,13 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 		if (tm.tm_year >= 119) // 2019 or up considered valid time
 		{
 			strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
-			snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+			snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName2, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
 		}
 		else
 		{
 			for (int i = 1; i < 10000; i++)
 			{
-				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName, name[0] ? name : SCREENSHOT_DEFAULT, i);
+				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName2, name[0] ? name : SCREENSHOT_DEFAULT, i);
 				if (!getFileType(out_name)) return;
 			}
 		}
@@ -874,9 +874,9 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 
 void FileGenerateSavePath(const char *name, char* out_name, int ext_replace)
 {
-	create_path(SAVE_DIR, CoreName);
+	create_path(SAVE_DIR, CoreName2);
 
-	sprintf(out_name, "%s/%s/", SAVE_DIR, CoreName);
+	sprintf(out_name, "%s/%s/", SAVE_DIR, CoreName2);
 	char *fname = out_name + strlen(out_name);
 
 	const char *p = strrchr(name, '/');
@@ -904,9 +904,9 @@ void FileGenerateSavePath(const char *name, char* out_name, int ext_replace)
 
 void FileGenerateSavestatePath(const char *name, char* out_name, int sufx)
 {
-	create_path(SAVESTATE_DIR, CoreName);
+	create_path(SAVESTATE_DIR, CoreName2);
 
-	sprintf(out_name, "%s/%s/", SAVESTATE_DIR, CoreName);
+	sprintf(out_name, "%s/%s/", SAVESTATE_DIR, CoreName2);
 	char *fname = out_name + strlen(out_name);
 
 	const char *p = strrchr(name, '/');
@@ -1224,6 +1224,12 @@ struct DirentComp
 		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type != DT_DIR)) return true;
 		if ((de1.de.d_type != DT_DIR) && (de2.de.d_type == DT_DIR)) return false;
 
+		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type == DT_DIR))
+		{
+			if (!(de1.flags & DT_EXT_ZIP) && (de2.flags & DT_EXT_ZIP)) return true;
+			if ((de1.flags & DT_EXT_ZIP) && !(de2.flags & DT_EXT_ZIP)) return false;
+		}
+
 		int len1 = strlen(de1.altname);
 		int len2 = strlen(de2.altname);
 		if ((len1 > 4) && (de1.altname[len1 - 4] == '.')) len1 -= 4;
@@ -1465,6 +1471,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 #endif
 			struct dirent64 _de = {};
+			int isZip = 0;
+
 			if (z)
 			{
 				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
@@ -1634,6 +1642,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 						{
 							// Fake that zip-file is a directory.
 							de->d_type = DT_DIR;
+							isZip = 1;
 							found = 1;
 						}
 						if (!found && is_minimig() && !memcmp(extension, "HDF", 3))
@@ -1681,6 +1690,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			      direntext_t dext;
 				    memset(&dext, 0, sizeof(dext));
 				    memcpy(&dext.de, de, sizeof(dext.de));
+				    if (isZip)
+				        dext.flags |= DT_EXT_ZIP;
 				    get_display_name(&dext, extension, options);
 				    DirItem.push_back(dext);
         }
